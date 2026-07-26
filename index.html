@@ -6,6 +6,12 @@
     <meta name="description" content="Gold Buying Assistant - Calculate gold jewelry prices with live DGJG rates and making charge comparison">
     <meta name="theme-color" content="#DAA520">
     <title>Gold Buying Assistant</title>
+    <link rel="manifest" href="manifest.json">
+        <script>
+          if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js');
+          }
+        </script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
