@@ -779,8 +779,8 @@
                 const item = document.createElement('div');
                 item.className = 'comparison-item ' + (isCheaper ? 'is-cheaper' : 'is-pricier');
                 item.innerHTML = `
-                    <div class="comparison-percent">${percent}%</div>
-                    <div class="comparison-total">${currency} ${total.toFixed(2)}</div>
+                    <div class="comparison-percent">${percent}% (Making Charge)</div>
+                    <div class="comparison-total">${currency} ${total.toFixed(2)} (Total)</div>
                     <div class="comparison-diff ${isCheaper ? 'save' : 'extra'}">
                         ${isCheaper ? `💰 Save ${currency} ${diff.toFixed(2)}` : `+${currency} ${Math.abs(diff).toFixed(2)}`}
                     </div>
