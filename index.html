@@ -625,9 +625,9 @@
                 if (dgjgStatus === 'ok' && dgjgLastSynced) {
                     sourceLine.textContent = `🔄 Synced from Dubai Jewellery Group · ${dgjgLastSynced.toLocaleTimeString()}`;
                 } else if (dgjgStatus === 'error') {
-                    sourceLine.textContent = '⚠️ DGJG auto-sync unavailable — enter today\'s rate per purity below';
+                    sourceLine.textContent = '⚠️ Live Rate is unavailable — enter today\'s rate per purity below';
                 } else if (dgjgStatus === 'not-configured') {
-                    sourceLine.textContent = '⚠️ DGJG auto-sync not set up — enter today\'s rate per purity below';
+                    sourceLine.textContent = '⚠️ Live Rate is not set up — enter today\'s rate per purity below';
                 } else {
                     sourceLine.textContent = 'Connecting…';
                 }
@@ -654,7 +654,7 @@
             if (source === 'dgjg') {
                 container.innerHTML = `
                     <div class="purity-rate-status purity-rate-ok">
-                        ✅ DGJG rate for ${currentPurity}: AED ${rate.toFixed(2)}/g
+                        ✅ Live rate for ${currentPurity}: AED ${rate.toFixed(2)}/g
                     </div>
                 `;
                 return;
