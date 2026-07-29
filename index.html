@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Gold Buying Assistant - Calculate gold jewelry prices with live DGJG rates and making charge comparison">
+    <meta name="description" content="Gold Buying Assistant - Calculate gold jewelry prices with live DGJG & Malabar rates and making charge comparison">
     <meta name="theme-color" content="#DAA520">
     <title>Gold Buying Assistant</title>
     <link rel="manifest" href="manifest.json">
@@ -431,7 +431,7 @@
                 <div class="result-row"><span class="result-label">Gold Value</span><span class="result-value" id="goldCost">--</span></div>
                 <div class="result-row"><span class="result-label">Making Charge</span><span class="result-value" id="makingChargeCost">--</span></div>
                 <div class="result-row"><span class="result-label" id="makingChargePercentLabel">Making Charge %</span><span class="result-value" id="makingChargePercent">--</span></div>
-                <div id="vatRow" class="result-row" style="display: none;"><span class="result-label">VAT (5%)</span><span class="result-value" id="vatAmount">--</span></div>
+                <div id="vatRow" class="result-row" style="display: none;"><span class="result-label" id="vatLabel">VAT (5%)</span><span class="result-value" id="vatAmount">--</span></div>
                 <div class="result-final"><div class="result-row"><span class="result-label">Final Price</span><span class="result-value" id="finalPrice">--</span></div></div>
             </div>
 
@@ -460,12 +460,14 @@
     <script>
         // ============ CONFIG ============
         const DGJG_API_URL = 'https://goldbuy.onrender.com/api/gold-rate';
+        const MALABAR_API_URL = 'https://goldbuy.onrender.com/api/gold-rate-india';
 
         // ============ CONSTANTS ============
         const PURITIES = { '14K': 0.585, '18K': 0.750, '21K': 0.875, '22K': 0.916, '24K': 1.0 };
         const KARAT_LIST = ['24K', '22K', '21K', '18K', '14K'];
         const CURRENCIES = { 'UAE': 'AED', 'India': 'INR' };
-        const VAT_UAE = 0.05;
+        const TAX_RATES = { 'UAE': 0.05, 'India': 0.03 };
+        const TAX_LABELS = { 'UAE': 'VAT (5%)', 'India': 'GST (3%)' };
 
         // ============ STATE ============
         let currentPurity = '22K';
@@ -473,6 +475,9 @@
         let dgjgRates = { '14K': null, '18K': null, '21K': null, '22K': null, '24K': null };
         let dgjgLastSynced = null;
         let dgjgStatus = DGJG_API_URL ? 'connecting' : 'not-configured'; // connecting | ok | error | not-configured
+        let indiaRates = { '14K': null, '18K': null, '21K': null, '22K': null, '24K': null };
+        let malabarLastSynced = null;
+        let malabarStatus = MALABAR_API_URL ? 'connecting' : 'not-configured'; // connecting | ok | error | not-configured
 
         document.addEventListener('DOMContentLoaded', () => {
             loadManualRates();
@@ -480,7 +485,9 @@
             renderPurityRateStatus();
             handleMakingChargeTypeChange();
             fetchDgjgRate();
+            fetchMalabarRate();
             setInterval(fetchDgjgRate, 10 * 60000);
+            setInterval(fetchMalabarRate, 10 * 60000);
             calculateResults();
         });
 
@@ -511,7 +518,7 @@
             calculateResults();
         }
 
-        // ============ DGJG AUTO-SYNC (only source of automatic rate) ============
+        // ============ DGJG AUTO-SYNC (UAE) ============
         async function fetchDgjgRate() {
             if (!DGJG_API_URL) {
                 dgjgStatus = 'not-configured';
@@ -542,14 +549,47 @@
             calculateResults();
         }
 
+        // ============ MALABAR AUTO-SYNC (India, 22K & 24K only) ============
+        async function fetchMalabarRate() {
+            if (!MALABAR_API_URL) {
+                malabarStatus = 'not-configured';
+                renderRatePills();
+                renderPurityRateStatus();
+                updateStatusBadge();
+                return;
+            }
+            try {
+                const res = await fetch(MALABAR_API_URL);
+                if (!res.ok) throw new Error('Backend returned ' + res.status);
+                const data = await res.json();
+                if (data.rates) {
+                    Object.keys(indiaRates).forEach(k => {
+                        if (data.rates[k]) indiaRates[k] = parseFloat(data.rates[k]);
+                    });
+                    malabarLastSynced = new Date();
+                    malabarStatus = 'ok';
+                } else {
+                    throw new Error('No rates in response');
+                }
+            } catch (err) {
+                malabarStatus = 'error';
+            }
+            renderRatePills();
+            renderPurityRateStatus();
+            updateStatusBadge();
+            calculateResults();
+        }
+
         // ============ RATE RESOLUTION ============
-        // DGJG only applies to UAE (it's a Dubai board rate in AED). Manual entry is the
-        // fallback everywhere it's missing (including India, always, since there's no
-        // automatic source for it).
+        // DGJG applies to UAE only. Malabar applies to India only (22K/24K only).
+        // Manual entry is the fallback everywhere either is missing.
         function getRateForKarat(karat) {
             const location = document.getElementById('location').value;
             if (location === 'UAE' && dgjgRates[karat]) {
                 return { rate: dgjgRates[karat], source: 'dgjg' };
+            }
+            if (location === 'India' && indiaRates[karat]) {
+                return { rate: indiaRates[karat], source: 'malabar' };
             }
             if (manualRates[karat]) {
                 return { rate: manualRates[karat], source: 'manual' };
@@ -580,23 +620,36 @@
 
             const sourceLine = document.getElementById('ratesSourceLine');
             const location = document.getElementById('location').value;
-            if (location !== 'UAE') {
-                sourceLine.textContent = 'DGJG rate is UAE-only — enter today\'s rate per purity below';
-            } else if (dgjgStatus === 'ok' && dgjgLastSynced) {
-                sourceLine.textContent = `🔄 Synced from Dubai Jewellery Group · ${dgjgLastSynced.toLocaleTimeString()}`;
-            } else if (dgjgStatus === 'error') {
-                sourceLine.textContent = '⚠️ Auto-sync unavailable — enter today\'s rate per purity below';
-            } else if (dgjgStatus === 'not-configured') {
-                sourceLine.textContent = '⚠️ Auto-sync not set up — enter today\'s rate per purity below';
+
+            if (location === 'UAE') {
+                if (dgjgStatus === 'ok' && dgjgLastSynced) {
+                    sourceLine.textContent = `🔄 Synced from Dubai Jewellery Group · ${dgjgLastSynced.toLocaleTimeString()}`;
+                } else if (dgjgStatus === 'error') {
+                    sourceLine.textContent = '⚠️ DGJG auto-sync unavailable — enter today\'s rate per purity below';
+                } else if (dgjgStatus === 'not-configured') {
+                    sourceLine.textContent = '⚠️ DGJG auto-sync not set up — enter today\'s rate per purity below';
+                } else {
+                    sourceLine.textContent = 'Connecting…';
+                }
             } else {
-                sourceLine.textContent = 'Connecting…';
+                if (malabarStatus === 'ok' && malabarLastSynced) {
+                    sourceLine.textContent = `🔄 Synced from Malabar Gold & Diamonds (22K/24K only) · ${malabarLastSynced.toLocaleTimeString()}`;
+                } else if (malabarStatus === 'error') {
+                    sourceLine.textContent = '⚠️ Malabar auto-sync unavailable — enter today\'s rate per purity below';
+                } else if (malabarStatus === 'not-configured') {
+                    sourceLine.textContent = '⚠️ Malabar auto-sync not set up — enter today\'s rate per purity below';
+                } else {
+                    sourceLine.textContent = 'Connecting…';
+                }
             }
         }
 
-        // ============ STEP 1: contextual manual entry when DGJG has no rate ============
+        // ============ STEP 1: contextual manual entry when no live rate ============
         function renderPurityRateStatus() {
             const container = document.getElementById('purityRateStatus');
             const { rate, source } = getRateForKarat(currentPurity);
+            const location = document.getElementById('location').value;
+            const currency = CURRENCIES[location];
 
             if (source === 'dgjg') {
                 container.innerHTML = `
@@ -607,13 +660,32 @@
                 return;
             }
 
+            if (source === 'malabar') {
+                container.innerHTML = `
+                    <div class="purity-rate-status purity-rate-ok">
+                        ✅ Malabar rate for ${currentPurity}: INR ${rate.toFixed(2)}/g
+                    </div>
+                `;
+                return;
+            }
+
             // No live rate — ask for it, prefilled with any previously saved value
-            const location = document.getElementById('location').value;
-            const currency = CURRENCIES[location];
             const existing = manualRates[currentPurity] ? manualRates[currentPurity] : '';
-            const reason = location !== 'UAE'
-                ? `No automatic rate for ${location}`
-                : (dgjgStatus === 'error' ? 'DGJG rate temporarily unavailable' : 'DGJG rate not available');
+            let reason;
+            if (location === 'UAE') {
+                reason = dgjgStatus === 'error' ? 'DGJG rate temporarily unavailable'
+                    : dgjgStatus === 'not-configured' ? 'DGJG auto-sync not set up'
+                    : 'DGJG rate not available';
+            } else {
+                const isMalabarKarat = (currentPurity === '22K' || currentPurity === '24K');
+                if (!isMalabarKarat) {
+                    reason = `Malabar doesn't publish ${currentPurity}`;
+                } else {
+                    reason = malabarStatus === 'error' ? 'Malabar rate temporarily unavailable'
+                        : malabarStatus === 'not-configured' ? 'Malabar auto-sync not set up'
+                        : 'Malabar rate not available';
+                }
+            }
 
             container.innerHTML = `
                 <div class="purity-rate-status purity-rate-missing">
@@ -634,6 +706,9 @@
             if (source === 'dgjg') {
                 badge.className = 'status-badge status-online';
                 statusText.textContent = '🟢 Live — Dubai Jewellery Group rate';
+            } else if (source === 'malabar') {
+                badge.className = 'status-badge status-online';
+                statusText.textContent = '🟢 Live — Malabar Gold & Diamonds rate';
             } else if (source === 'manual') {
                 badge.className = 'status-badge status-manual';
                 statusText.textContent = `✏️ Using your entered rate for ${currentPurity}`;
@@ -695,7 +770,6 @@
             resultsContainer.style.display = 'block';
 
             const currency = CURRENCIES[location];
-            //const pureGoldWeight = weight * PURITIES[currentPurity];
             const goldCost = weight * goldRatePerGram;
 
             let makingChargeCost, makingChargePercent;
@@ -708,10 +782,14 @@
             }
 
             const subtotal = goldCost + makingChargeCost;
-            const vatAmount = location === 'UAE' ? subtotal * VAT_UAE : 0;
+            const taxRate = TAX_RATES[location] || 0;
+            const vatAmount = subtotal * taxRate;
             const totalPrice = subtotal + vatAmount;
 
-            const sourceLabel = source === 'dgjg' ? 'DGJG live' : source === 'manual' ? 'your entry' : 'no rate';
+            const sourceLabel = source === 'dgjg' ? 'DGJG live'
+                : source === 'malabar' ? 'Malabar live'
+                : source === 'manual' ? 'your entry'
+                : 'no rate';
             document.getElementById('rateUsedDisplay').textContent = `${currency} ${goldRatePerGram.toFixed(2)}/g (${currentPurity}, ${sourceLabel})`;
             document.getElementById('goldWeightDisplay').textContent = `${weight.toFixed(2)}g`;
             document.getElementById('goldCost').textContent = `${currency} ${goldCost.toFixed(2)}`;
@@ -720,12 +798,9 @@
             document.getElementById('finalPrice').textContent = `${currency} ${totalPrice.toFixed(2)}`;
 
             const vatRow = document.getElementById('vatRow');
-            if (location === 'UAE') {
-                vatRow.style.display = 'flex';
-                document.getElementById('vatAmount').textContent = `${currency} ${vatAmount.toFixed(2)}`;
-            } else {
-                vatRow.style.display = 'none';
-            }
+            vatRow.style.display = 'flex';
+            document.getElementById('vatLabel').textContent = TAX_LABELS[location] || 'Tax';
+            document.getElementById('vatAmount').textContent = `${currency} ${vatAmount.toFixed(2)}`;
 
             document.getElementById('makingChargePercentLabel').textContent =
                 makingChargeType === 'percentage' ? 'Making Charge %' : 'Making Charge (calculated %)';
@@ -751,7 +826,7 @@
             const comparisonGrid = document.getElementById('comparisonGrid');
             const comparisonHint = document.getElementById('comparisonHint');
             const currency = CURRENCIES[location];
-            const vat = location === 'UAE' ? VAT_UAE : 0;
+            const vat = TAX_RATES[location] || 0;
 
             const center = Math.round(currentPercent);
             comparisonHint.textContent = `You entered ${currentPercent.toFixed(1)}% — here's what nearby percentages would cost.`;
