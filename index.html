@@ -760,7 +760,7 @@
             const resultsContainer = document.getElementById('resultsContainer');
             const emptyState = document.getElementById('emptyState');
 
-            if (!weight || !makingChargeValue || !goldRatePerGram) {
+            if (!weight || isNaN(makingChargeValue) || !goldRatePerGram) { {
                 resultsContainer.style.display = 'none';
                 emptyState.style.display = 'block';
                 return;
